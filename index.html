@@ -3,7 +3,9 @@
 
 <head>
   <meta charset="UTF-8">
-  <title>PDF Utilities - Local V2</title>
+  <title>Sovee PDF - Local Tools</title>
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232563EB' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m12.83 2.18a2 2 0 0 0-1.66 0L2.6 6.08a1 1 0 0 0 0 1.83l8.58 3.91a2 2 0 0 0 1.66 0l8.58-3.9a1 1 0 0 0 0-1.83Z'/><path d='m22 17.65-9.17 4.16a2 2 0 0 1-1.66 0L2 17.65'/><path d='m22 12.65-9.17 4.16a2 2 0 0 1-1.66 0L2 12.65'/></svg>">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <script src="https://unpkg.com/lucide@latest"></script>
   <style>
@@ -646,6 +648,8 @@
 
       tools: [
         { id: 'MERGE', name: 'Merge PDF', icon: 'files', desc: 'Combine multiple PDFs into one document.' },
+        { id: 'JPG_PDF', name: 'JPG to PDF', icon: 'file-image', desc: 'Convert JPG images to PDF documents.' },
+        { id: 'PNG_PDF', name: 'PNG to PDF', icon: 'file-image', desc: 'Convert PNG images to PDF documents.' },
         { id: 'COMPRESS', name: 'Compress PDF', icon: 'minimize-2', desc: 'Reduce file size by optimizing pages.' },
         { id: 'JPG', name: 'PDF to JPG', icon: 'image', desc: 'Convert pages to high-quality JPG images.' },
         { id: 'PNG', name: 'PDF to PNG', icon: 'image', desc: 'Convert pages to transparent PNG images.' },
@@ -668,21 +672,53 @@
         const btn = document.getElementById('mainActionBtn');
         const titleMap = {
           'MERGE': 'Merge & Download', 'COMPRESS': 'Configure Compression', 'JPG': 'Download JPGs',
-          'PNG': 'Download PNGs', 'WORD': 'Extract Text', 'WATERMARK': 'Add Watermark'
+          'PNG': 'Download PNGs', 'WORD': 'Extract Text', 'WATERMARK': 'Add Watermark',
+          'JPG_PDF': 'Download PDF', 'PNG_PDF': 'Download PDF'
         };
         btn.querySelector('span').innerText = titleMap[mode];
-        document.getElementById('fileInput').click();
+
+        // Dynamic accept
+        const fi = document.getElementById('fileInput');
+        if (mode === 'JPG_PDF') fi.accept = '.jpg, .jpeg';
+        else if (mode === 'PNG_PDF') fi.accept = '.png';
+        else fi.accept = 'application/pdf';
+
+        fi.click();
       },
 
       async handleFiles(fileList) {
         if (!fileList.length) return;
-        this.ui.showLoader(true, 'Reading Files...');
+        this.ui.showLoader(true, 'Processing...');
         try {
-          const files = Array.from(fileList).filter(f => f.type === 'application/pdf');
+          // Filter valid types based on current tool, but allow mix for MERGE if extended later
+          const files = Array.from(fileList);
+
           for (const file of files) {
-            const buffer = await file.arrayBuffer();
+            let buffer;
+            const isImg = file.type.startsWith('image/');
+            const isPdf = file.type === 'application/pdf';
+
+            if (!isImg && !isPdf) continue;
+
+            if (isImg) {
+              // Convert Image to PDF Buffer
+              const { PDFDocument } = PDFLib;
+              const pdfDoc = await PDFDocument.create();
+              const imgBytes = await file.arrayBuffer();
+              let img;
+              if (file.type === 'image/jpeg') img = await pdfDoc.embedJpg(imgBytes);
+              else img = await pdfDoc.embedPng(imgBytes);
+
+              const page = pdfDoc.addPage([img.width, img.height]);
+              page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+              buffer = await pdfDoc.save(); // Unit8Array
+            } else {
+              buffer = await file.arrayBuffer();
+            }
+
             const sourceId = Math.random().toString(36).substring(7);
-            this.state.sourceDocs[sourceId] = { name: file.name, buffer };
+            // Treat everything as a PDF source now
+            this.state.sourceDocs[sourceId] = { name: file.name.replace(/\.[^/.]+$/, "") + ".pdf", buffer };
 
             try {
               const pdfDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
@@ -693,8 +729,7 @@
                 });
               }
             } catch (err) {
-              if (err.name === 'PasswordException') alert(`File ${file.name} is password protected. Please unlock it first.`);
-              else console.error(err);
+              console.error(err);
             }
           }
           if (this.state.pages.length > 0) {
@@ -726,6 +761,7 @@
           case 'PNG': return this.process.toImages('png');
           case 'WORD': return this.process.toText();
           case 'WATERMARK': return this.ui.openModal('watermark');
+          default: return this.process.savePDF(); // Handle new IMG tools (they just save the converted PDF)
         }
       },
 
