@@ -1,0 +1,955 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <title>PDF Utilities - Local V2</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    /* --------------------------------------------------------------------------------
+           Design System (Framer / Linear Style)
+           -------------------------------------------------------------------------------- */
+    :root {
+      /* Colors */
+      --bg: #F9FAFB;
+      --bg-card: #FFFFFF;
+      --text-primary: #111827;
+      --text-secondary: #6B7280;
+      --border: #E5E7EB;
+      --primary: #2563EB;
+      /* Royal Blue */
+      --primary-hover: #1D4ED8;
+      --danger: #EF4444;
+
+      /* Radius & Shadows */
+      --radius-md: 12px;
+      --radius-lg: 16px;
+      --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+      --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+
+      /* Typography */
+      --font-stack: 'Inter', system-ui, -apple-system, sans-serif;
+      --transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* Base */
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-primary);
+      font-family: var(--font-stack);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+    }
+
+    /* --------------------------------------------------------------------------------
+           Components
+           -------------------------------------------------------------------------------- */
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      padding: 0.625rem 1rem;
+      border-radius: 8px;
+      font-weight: 500;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: var(--transition);
+      border: 1px solid transparent;
+      text-decoration: none;
+      user-select: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+      border-color: transparent;
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background: white;
+      color: var(--text-primary);
+      border-color: var(--border);
+      box-shadow: var(--shadow-sm);
+    }
+
+    .btn-secondary:hover {
+      background: #F9FAFB;
+      border-color: #D1D5DB;
+    }
+
+    .btn-danger {
+      background: #ab2828;
+      color: white;
+    }
+
+    .btn-danger-outline {
+      color: var(--danger);
+      border-color: var(--border);
+      background: white;
+    }
+
+    .btn-danger-outline:hover {
+      background: #FEF2F2;
+      border-color: #FECACA;
+    }
+
+    .btn-icon-only {
+      padding: 0.5rem;
+      border-radius: 6px;
+      color: var(--text-secondary);
+    }
+
+    .btn-icon-only:hover {
+      background-color: #F3F4F6;
+      color: var(--text-primary);
+    }
+
+    /* Inputs & Selects */
+    .input,
+    .select {
+      width: 100%;
+      padding: 0.625rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-size: 0.875rem;
+      outline: none;
+      transition: var(--transition);
+      background: white;
+      font-family: inherit;
+    }
+
+    .input:focus,
+    .select:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+    }
+
+    /* Toast Container */
+    .toast-container {
+      position: fixed;
+      top: 1.5rem;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: rgba(30, 30, 35, 0.95);
+      color: white;
+      padding: 0.75rem 1.25rem;
+      border-radius: 99px;
+      font-size: 0.875rem;
+      font-weight: 500;
+      box-shadow: var(--shadow-lg);
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      opacity: 0;
+      transform: translateY(-20px) scale(0.95);
+      animation: toastIn 0.3s forwards;
+    }
+
+    @keyframes toastIn {
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
+    }
+
+    /* --------------------------------------------------------------------------------
+           Layout: Global Navbar
+           -------------------------------------------------------------------------------- */
+    header {
+      height: 64px;
+      background: rgba(255, 255, 255, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      text-decoration: none;
+      cursor: pointer;
+    }
+
+    .stats-bar {
+      display: none;
+      /* Active in Workbench */
+      align-items: center;
+      gap: 1.5rem;
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+    }
+
+    .stats-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .stats-item strong {
+      color: var(--text-primary);
+    }
+
+    /* Main Container */
+    #app {
+      margin-top: 64px;
+      /* header space */
+      padding: 3rem 2rem;
+      max-width: 1280px;
+      margin-left: auto;
+      margin-right: auto;
+      width: 100%;
+      flex: 1;
+      padding-bottom: 120px;
+    }
+
+    /* --------------------------------------------------------------------------------
+           View: Dashboard (Homepage)
+           -------------------------------------------------------------------------------- */
+    .dashboard {
+      /* display set by JS */
+      text-align: center;
+      animation: fadeIn 0.4s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .hero-text {
+      margin-bottom: 3rem;
+    }
+
+    .hero-text h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      letter-spacing: -0.05em;
+      margin-bottom: 1rem;
+    }
+
+    .hero-text p {
+      color: var(--text-secondary);
+      font-size: 1.125rem;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .tools-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+      text-align: left;
+    }
+
+    .tool-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 1.5rem;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .tool-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-lg);
+      border-color: rgba(37, 99, 235, 0.3);
+    }
+
+    .tool-icon {
+      width: 48px;
+      height: 48px;
+      background: #EFF6FF;
+      color: var(--primary);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .tool-card h3 {
+      font-size: 1.125rem;
+      font-weight: 600;
+    }
+
+    .tool-card p {
+      font-size: 0.875rem;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    /* --------------------------------------------------------------------------------
+           View: Workbench (Editor)
+           -------------------------------------------------------------------------------- */
+    .workbench {
+      display: none;
+    }
+
+    .wb-toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2rem;
+      background: white;
+      padding: 1rem;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border);
+      box-shadow: var(--shadow-sm);
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .wb-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 2rem;
+      padding-bottom: 4rem;
+    }
+
+    /* Page Card */
+    .page-card {
+      background: var(--bg-card);
+      border-radius: var(--radius-md);
+      box-shadow: var(--shadow-sm);
+      padding: 0.75rem;
+      position: relative;
+      cursor: grab;
+      transition: var(--transition);
+      border: 2px solid transparent;
+    }
+
+    .page-card:hover {
+      transform: translateY(-4px);
+      box-shadow: var(--shadow-md);
+    }
+
+    .page-card.dragging {
+      opacity: 0.5;
+      border-style: dashed;
+      border-color: var(--primary);
+      transform: scale(0.95);
+    }
+
+    .page-card:active {
+      cursor: grabbing;
+    }
+
+    .card-preview {
+      background: #F3F4F6;
+      border-radius: 8px;
+      overflow: hidden;
+      aspect-ratio: 1/1.414;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+
+    .card-preview canvas {
+      max-width: 100%;
+      height: auto;
+      transition: transform 0.3s ease;
+    }
+
+    .card-actions {
+      position: absolute;
+      top: 0.5rem;
+      right: 0.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .page-card:hover .card-actions {
+      opacity: 1;
+    }
+
+    .action-btn-mini {
+      width: 32px;
+      height: 32px;
+      background: white;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      color: var(--text-secondary);
+    }
+
+    .action-btn-mini:hover {
+      color: var(--primary);
+      transform: scale(1.1);
+    }
+
+    .action-btn-mini.danger:hover {
+      color: var(--danger);
+    }
+
+    .card-info {
+      margin-top: 0.75rem;
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    /* --------------------------------------------------------------------------------
+           Modals & Utilities
+           -------------------------------------------------------------------------------- */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal {
+      background: white;
+      padding: 2rem;
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 420px;
+      box-shadow: var(--shadow-lg);
+      animation: modalUp 0.3s ease-out;
+    }
+
+    @keyframes modalUp {
+      from {
+        opacity: 0;
+        transform: translateY(10px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    /* Loading Overlay */
+    .loader {
+      position: fixed;
+      inset: 0;
+      z-index: 200;
+      background: rgba(255, 255, 255, 0.95);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+    }
+
+    .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid #E5E7EB;
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="brand" onclick="APP.goHome()">
+      <i data-lucide="layers" class="text-primary"></i>
+      <span>Sovee PDF</span>
+      <span
+        style="font-size:0.75rem; background:#DBEAFE; color:#1E40AF; padding:2px 6px; border-radius:4px; margin-left:8px;">V1</span>
+    </div>
+
+    <div class="stats-bar" id="statsBar">
+      <div class="stats-item">
+        <i data-lucide="file" size="16"></i>
+        <span id="statFileCount">0 Files</span>
+      </div>
+      <div style="width:1px; height:16px; background:var(--border);"></div>
+      <div class="stats-item">
+        <i data-lucide="copy" size="16"></i>
+        <span id="statPageCount">0 Pages</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- App Container -->
+  <div id="app">
+    <!-- DASHBOARD VIEW -->
+    <div id="dashboard" class="dashboard">
+      <div class="hero-text">
+        <h1>Sovee PDF Tools</h1>
+        <p>Privacy-first. No uploads. All processing happens in your browser.</p>
+      </div>
+      <div class="tools-grid"></div>
+    </div>
+
+    <!-- WORKBENCH VIEW -->
+    <div id="workbench" class="workbench">
+      <div class="wb-toolbar">
+        <div style="display:flex; gap:1rem; align-items:center;">
+          <button class="btn btn-secondary" onclick="document.getElementById('fileInput').click()">
+            <i data-lucide="plus" size="16"></i> Add More
+          </button>
+          <button class="btn btn-secondary" onclick="APP.actions.reverse()">
+            <i data-lucide="arrow-up-down" size="16"></i> Reverse
+          </button>
+          <button class="btn btn-danger-outline" onclick="APP.actions.deleteAll()">
+            <i data-lucide="trash-2" size="16"></i> Clear All
+          </button>
+        </div>
+
+        <div style="display:flex; gap:1rem; align-items:center;">
+          <input type="text" id="filenameInput" class="input" style="width:200px;" value="processed.pdf">
+          <button class="btn btn-primary" id="mainActionBtn" onclick="APP.executeAction()">
+            <span>Download</span>
+          </button>
+        </div>
+      </div>
+
+      <div id="grid" class="wb-grid"></div>
+    </div>
+  </div>
+
+  <!-- Hidden Input -->
+  <input type="file" id="fileInput" multiple accept="application/pdf" style="display:none">
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer"></div>
+
+  <!-- Loader -->
+  <div class="loader" id="loader">
+    <div class="spinner"></div>
+    <p style="margin-top:1rem; color:#6B7280; font-weight:500;" id="loaderText">Processing...</p>
+  </div>
+
+  <!-- Modals -->
+  <!-- Watermark -->
+  <div id="modal-watermark" class="modal-overlay">
+    <div class="modal">
+      <h2 style="margin-bottom:1rem;">Add Watermark</h2>
+      <input type="text" id="wmText" class="input" placeholder="Confidential">
+      <div style="margin-top:1.5rem; display:flex; justify-content:flex-end; gap:0.5rem;">
+        <button class="btn btn-secondary" onclick="APP.ui.closeModals()">Cancel</button>
+        <button class="btn btn-primary" onclick="APP.process.watermark()">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Compress Settings -->
+  <div id="modal-compress" class="modal-overlay">
+    <div class="modal">
+      <h2 style="margin-bottom:1rem;">Compression Level</h2>
+      <p style="color:var(--text-secondary); margin-bottom:1rem; font-size:0.9rem;">
+        Higher compression rasterizes text to images. Choose 'Light' to keep better readability.
+      </p>
+      <div style="display:flex; flex-direction:column; gap:1rem;">
+        <label style="font-weight:500; font-size:0.9rem;">
+          <input type="radio" name="compLevel" value="light" checked> Light (Better Quality, ~25% reduction)
+        </label>
+        <label style="font-weight:500; font-size:0.9rem;">
+          <input type="radio" name="compLevel" value="medium"> Medium (Balanced, ~50% reduction)
+        </label>
+        <label style="font-weight:500; font-size:0.9rem;">
+          <input type="radio" name="compLevel" value="high"> High (Smaller Size, ~75% reduction)
+        </label>
+      </div>
+      <div style="margin-top:1.5rem; display:flex; justify-content:flex-end; gap:0.5rem;">
+        <button class="btn btn-secondary" onclick="APP.ui.closeModals()">Cancel</button>
+        <button class="btn btn-primary" onclick="APP.process.compress()">Compress</button>
+      </div>
+    </div>
+  </div>
+
+
+
+  <!-- Libraries -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const APP = {
+      state: {
+        mode: 'MERGE',
+        sourceDocs: {},
+        pages: []
+      },
+
+      tools: [
+        { id: 'MERGE', name: 'Merge PDF', icon: 'files', desc: 'Combine multiple PDFs into one document.' },
+        { id: 'COMPRESS', name: 'Compress PDF', icon: 'minimize-2', desc: 'Reduce file size by optimizing pages.' },
+        { id: 'JPG', name: 'PDF to JPG', icon: 'image', desc: 'Convert pages to high-quality JPG images.' },
+        { id: 'PNG', name: 'PDF to PNG', icon: 'image', desc: 'Convert pages to transparent PNG images.' },
+        { id: 'WORD', name: 'PDF to Word', icon: 'file-text', desc: 'Extract text content to a text file.' },
+        { id: 'WATERMARK', name: 'Watermark', icon: 'stamp', desc: 'Add overlay text to every page.' }
+      ],
+
+      init() {
+        this.ui.renderDashboard();
+        this.bindEvents();
+        lucide.createIcons();
+      },
+
+      bindEvents() {
+        document.getElementById('fileInput').addEventListener('change', (e) => this.handleFiles(e.target.files));
+      },
+
+      selectTool(mode) {
+        this.state.mode = mode;
+        const btn = document.getElementById('mainActionBtn');
+        const titleMap = {
+          'MERGE': 'Merge & Download', 'COMPRESS': 'Configure Compression', 'JPG': 'Download JPGs',
+          'PNG': 'Download PNGs', 'WORD': 'Extract Text', 'WATERMARK': 'Add Watermark'
+        };
+        btn.querySelector('span').innerText = titleMap[mode];
+        document.getElementById('fileInput').click();
+      },
+
+      async handleFiles(fileList) {
+        if (!fileList.length) return;
+        this.ui.showLoader(true, 'Reading Files...');
+        try {
+          const files = Array.from(fileList).filter(f => f.type === 'application/pdf');
+          for (const file of files) {
+            const buffer = await file.arrayBuffer();
+            const sourceId = Math.random().toString(36).substring(7);
+            this.state.sourceDocs[sourceId] = { name: file.name, buffer };
+
+            try {
+              const pdfDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
+              for (let i = 1; i <= pdfDoc.numPages; i++) {
+                this.state.pages.push({
+                  id: Math.random().toString(36).substring(2),
+                  sourceId, pageIndex: i, rotation: 0
+                });
+              }
+            } catch (err) {
+              if (err.name === 'PasswordException') alert(`File ${file.name} is password protected. Please unlock it first.`);
+              else console.error(err);
+            }
+          }
+          if (this.state.pages.length > 0) {
+            document.getElementById('dashboard').style.display = 'none';
+            document.getElementById('workbench').style.display = 'block';
+            document.getElementById('statsBar').style.display = 'flex';
+            this.ui.updateStats();
+            this.ui.renderGrid();
+            this.ui.toast(`Loaded ${files.length} files`);
+          }
+        } catch (e) { this.ui.toast('Error loading files', 'error'); }
+        finally { this.ui.showLoader(false); document.getElementById('fileInput').value = ''; }
+      },
+
+      goHome() {
+        if (this.state.pages.length > 0 && !confirm('Clear current workspace?')) return;
+        this.state.pages = []; this.state.sourceDocs = {};
+        document.getElementById('dashboard').style.display = 'block';
+        document.getElementById('workbench').style.display = 'none';
+        document.getElementById('statsBar').style.display = 'none';
+      },
+
+      executeAction() {
+        if (!this.state.pages.length) return this.ui.toast('No pages', 'error');
+        switch (this.state.mode) {
+          case 'MERGE': return this.process.savePDF();
+          case 'COMPRESS': return this.ui.openModal('compress');
+          case 'JPG': return this.process.toImages('jpeg');
+          case 'PNG': return this.process.toImages('png');
+          case 'WORD': return this.process.toText();
+          case 'WATERMARK': return this.ui.openModal('watermark');
+        }
+      },
+
+      actions: {
+        rotate(id) { const p = APP.state.pages.find(x => x.id === id); if (p) { p.rotation = (p.rotation + 90) % 360; APP.ui.refreshCard(p); } },
+        duplicate(idx) { const p = APP.state.pages[idx]; APP.state.pages.splice(idx + 1, 0, { ...p, id: Math.random().toString(36).substring(2) }); APP.ui.renderGrid(); APP.ui.updateStats(); },
+        delete(idx) { APP.state.pages.splice(idx, 1); APP.ui.renderGrid(); APP.ui.updateStats(); },
+        reverse() { APP.state.pages.reverse(); APP.ui.renderGrid(); },
+        deleteAll() { if (confirm("Clear all?")) { APP.state.pages = []; APP.ui.renderGrid(); APP.ui.updateStats(); } }
+      },
+
+      process: {
+        async getMergedDoc() {
+          const { PDFDocument, degrees } = PDFLib;
+          const doc = await PDFDocument.create();
+          const cache = {};
+          for (const p of APP.state.pages) {
+            if (!cache[p.sourceId]) cache[p.sourceId] = await PDFDocument.load(APP.state.sourceDocs[p.sourceId].buffer);
+            const [cp] = await doc.copyPages(cache[p.sourceId], [p.pageIndex - 1]);
+            cp.setRotation(degrees(cp.getRotation().angle + p.rotation));
+            doc.addPage(cp);
+          }
+          return doc;
+        },
+
+        async savePDF() {
+          APP.ui.showLoader(true, 'Saving...');
+          try {
+            const doc = await this.getMergedDoc();
+            const bytes = await doc.save();
+            APP.utils.download(bytes, APP.utils.getFilename(), 'application/pdf');
+            APP.ui.toast('Success');
+          } catch (e) { console.error(e); APP.ui.toast('Save Failed', 'error'); }
+          finally { APP.ui.showLoader(false); }
+        },
+
+        async compress() {
+          APP.ui.closeModals();
+          APP.ui.showLoader(true, 'Compressing...');
+
+          // Improved Settings: Scale vs Quality trade-off
+          const levels = {
+            light: { scale: 2.0, quality: 0.85 }, // Very high quality, minor reduction
+            medium: { scale: 1.5, quality: 0.60 }, // Balanced
+            high: { scale: 1.0, quality: 0.50 }   // Aggressive
+          };
+          const selected = document.querySelector('input[name="compLevel"]:checked').value;
+          const settings = levels[selected] || levels.medium;
+
+          try {
+            const { PDFDocument } = PDFLib;
+            const doc = await PDFDocument.create();
+            let i = 0;
+            for (const p of APP.state.pages) {
+              i++; APP.ui.showLoader(true, `Compressing ${i}/${APP.state.pages.length}`);
+              const src = APP.state.sourceDocs[p.sourceId];
+              const pdfWrap = await pdfjsLib.getDocument({ data: src.buffer.slice(0) }).promise;
+              const pdfPage = await pdfWrap.getPage(p.pageIndex);
+              const vp = pdfPage.getViewport({ scale: settings.scale });
+              const cvs = document.createElement('canvas');
+              cvs.width = vp.width; cvs.height = vp.height;
+              await pdfPage.render({ canvasContext: cvs.getContext('2d'), viewport: vp }).promise;
+              const imgData = cvs.toDataURL('image/jpeg', settings.quality);
+              const img = await doc.embedJpg(imgData);
+              const page = doc.addPage([vp.width, vp.height]);
+              page.drawImage(img, { x: 0, y: 0, width: vp.width, height: vp.height });
+            }
+            const bytes = await doc.save();
+            APP.utils.download(bytes, 'compressed-' + APP.utils.getFilename(), 'application/pdf');
+            APP.ui.toast('Compression Complete');
+          } catch (e) { console.error(e); APP.ui.toast('Compression Error: ' + e.message, 'error'); }
+          finally { APP.ui.showLoader(false); }
+        },
+
+        async toImages(fmt) {
+          APP.ui.showLoader(true, 'Rendering...');
+          try {
+            const zip = new JSZip();
+            let i = 0;
+            for (const p of APP.state.pages) {
+              i++; APP.ui.showLoader(true, `Rendering ${i}/${APP.state.pages.length}`);
+              const src = APP.state.sourceDocs[p.sourceId];
+              const pdfWrap = await pdfjsLib.getDocument({ data: src.buffer.slice(0) }).promise;
+              const pdfPage = await pdfWrap.getPage(p.pageIndex);
+              const vp = pdfPage.getViewport({ scale: 2.0, rotation: p.rotation });
+              const cvs = document.createElement('canvas'); cvs.width = vp.width; cvs.height = vp.height;
+              await pdfPage.render({ canvasContext: cvs.getContext('2d'), viewport: vp }).promise;
+              const blob = await new Promise(r => cvs.toBlob(r, `image/${fmt}`));
+              zip.file(`Page_${i}.${fmt}`, blob);
+            }
+            const final = await zip.generateAsync({ type: 'blob' });
+            APP.utils.download(final, 'images.zip', 'application/zip');
+            APP.ui.toast('Images Downloaded');
+          } catch (e) { APP.ui.toast('Failed', 'error'); }
+          finally { APP.ui.showLoader(false); }
+        },
+
+        async toText() {
+          APP.ui.showLoader(true, 'Extracting...');
+          try {
+            let txt = "";
+            for (const p of APP.state.pages) {
+              const src = APP.state.sourceDocs[p.sourceId];
+              const doc = await pdfjsLib.getDocument({ data: src.buffer.slice(0) }).promise;
+              const page = await doc.getPage(p.pageIndex);
+              const tc = await page.getTextContent();
+              txt += `--- Page ${p.pageIndex} ---\n` + tc.items.map(s => s.str).join(' ') + '\n\n';
+            }
+            APP.utils.download(new Blob([txt], { type: 'text/plain' }), 'extracted.txt');
+            APP.ui.toast('Text Extracted');
+          } catch (e) { APP.ui.toast('Failed', 'error'); }
+          finally { APP.ui.showLoader(false); }
+        },
+
+        async watermark() {
+          APP.ui.closeModals();
+          const text = document.getElementById('wmText').value;
+          if (!text) return;
+          APP.ui.showLoader(true, 'Applying...');
+          try {
+            const { PDFDocument, rgb, degrees, StandardFonts } = PDFLib;
+            const doc = await this.getMergedDoc();
+            const font = await doc.embedFont(StandardFonts.HelveticaBold);
+            doc.getPages().forEach(p => {
+              const { width, height } = p.getSize();
+              p.drawText(text, {
+                x: width / 2 - (text.length * 15), y: height / 2,
+                size: 50, font, color: rgb(0.9, 0.2, 0.2), opacity: 0.3, rotate: degrees(45)
+              });
+            });
+            const bytes = await doc.save();
+            APP.utils.download(bytes, 'watermarked-' + APP.utils.getFilename(), 'application/pdf');
+            APP.ui.toast('Success');
+          } catch (e) { APP.ui.toast('Failed', 'error'); }
+          finally { APP.ui.showLoader(false); }
+        }
+      },
+
+      ui: {
+        renderDashboard() {
+          document.querySelector('.tools-grid').innerHTML = APP.tools.map(t => `
+                        <div class="tool-card" onclick="APP.selectTool('${t.id}')">
+                            <div class="tool-icon"><i data-lucide="${t.icon}"></i></div>
+                            <div><h3>${t.name}</h3><p>${t.desc}</p></div>
+                        </div>
+                    `).join('');
+          lucide.createIcons();
+        },
+        renderGrid() {
+          const grid = document.getElementById('grid'); grid.innerHTML = '';
+          APP.state.pages.forEach((p, idx) => grid.appendChild(this.createCard(p, idx)));
+          lucide.createIcons();
+        },
+        createCard(page, idx) {
+          const el = document.createElement('div'); el.className = 'page-card'; el.draggable = true; el.dataset.id = page.id;
+          el.innerHTML = `
+                        <div class="card-preview"><canvas id="cvs_${page.id}"></canvas>
+                        <div class="card-actions">
+                            <button class="action-btn-mini" onclick="APP.actions.rotate('${page.id}')"><i data-lucide="rotate-cw" size="14"></i></button>
+                            <button class="action-btn-mini" onclick="APP.actions.duplicate(${idx})"><i data-lucide="copy" size="14"></i></button>
+                            <button class="action-btn-mini danger" onclick="APP.actions.delete(${idx})"><i data-lucide="trash" size="14"></i></button>
+                        </div></div>
+                        <div class="card-info"><span>Page ${page.pageIndex}</span></div>`;
+          this.renderThumb(page);
+          el.addEventListener('dragstart', (e) => { e.dataTransfer.setData('idx', idx); el.classList.add('dragging'); });
+          el.addEventListener('dragend', () => el.classList.remove('dragging'));
+          el.addEventListener('dragover', (e) => e.preventDefault());
+          el.addEventListener('drop', (e) => {
+            e.preventDefault(); const from = parseInt(e.dataTransfer.getData('idx'));
+            if (from !== idx) { const [it] = APP.state.pages.splice(from, 1); APP.state.pages.splice(idx, 0, it); APP.ui.renderGrid(); }
+          });
+          return el;
+        },
+        async renderThumb(page) {
+          setTimeout(async () => {
+            const canvas = document.getElementById(`cvs_${page.id}`);
+            if (!canvas) return;
+            canvas.style.transform = `rotate(${page.rotation}deg)`;
+            const src = APP.state.sourceDocs[page.sourceId];
+            const doc = await pdfjsLib.getDocument({ data: src.buffer.slice(0) }).promise;
+            const p = await doc.getPage(page.pageIndex);
+            const vp = p.getViewport({ scale: 0.4 });
+            canvas.width = vp.width; canvas.height = vp.height;
+            await p.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+          }, 0);
+        },
+        refreshCard(page) { const c = document.getElementById(`cvs_${page.id}`); if (c) c.style.transform = `rotate(${page.rotation}deg)`; },
+        updateStats() {
+          document.getElementById('statFileCount').innerText = `${Object.keys(APP.state.sourceDocs).length} Files`;
+          document.getElementById('statPageCount').innerText = `${APP.state.pages.length} Pages`;
+        },
+        showLoader(show, text) {
+          document.getElementById('loader').style.display = show ? 'flex' : 'none';
+          if (text) document.getElementById('loaderText').innerText = text;
+        },
+        toast(msg, type = 'success') {
+          const t = document.createElement('div'); t.className = 'toast';
+          if (type === 'error') t.style.background = '#AA2222';
+          t.innerText = msg;
+          document.getElementById('toastContainer').appendChild(t);
+          setTimeout(() => t.remove(), 3000);
+        },
+        openModal(id, title, desc, onConfirm) {
+          document.getElementById(`modal-${id}`).style.display = 'flex';
+          if (title) document.getElementById('passTitle').innerText = title;
+          if (desc) document.getElementById('passDesc').innerText = desc;
+          if (onConfirm) document.getElementById('passBtn').onclick = onConfirm;
+        },
+        closeModals() { document.querySelectorAll('.modal-overlay').forEach(e => e.style.display = 'none'); }
+      },
+
+      utils: {
+        download(data, name, type) {
+          const blob = data instanceof Blob ? data : new Blob([data], { type });
+          const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = name;
+          document.body.appendChild(link); link.click(); document.body.removeChild(link);
+        },
+        getFilename() { return document.getElementById('filenameInput').value || 'output.pdf'; }
+      }
+    };
+
+    window.onload = () => APP.init();
+
+  </script>
+</body>
+
+</html>
