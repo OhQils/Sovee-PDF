@@ -514,6 +514,107 @@
         transform: rotate(360deg);
       }
     }
+
+    /* --------------------------------------------------------------------------------
+           Mobile Responsiveness
+           -------------------------------------------------------------------------------- */
+    @media (max-width: 640px) {
+
+      /* Header */
+      header {
+        padding: 0 1rem;
+        height: auto;
+        min-height: 60px;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+      }
+
+      .brand {
+        padding: 0.5rem 0;
+      }
+
+      .stats-bar {
+        gap: 0.75rem;
+        font-size: 0.75rem;
+      }
+
+      .stats-item span {
+        display: inline;
+        /* Show text again */
+        font-size: 0.75rem;
+      }
+
+      /* Show compact stats */
+      .stats-item::after {
+        content: none;
+      }
+
+      /* Actually, cleaner to just stack or scroll. Let's just adjust spacing. */
+
+      /* App Padding */
+      #app {
+        padding: 1rem;
+        margin-top: 72px;
+        /* adjust for header wrap */
+      }
+
+      /* Toolbar */
+      .wb-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        padding: 0.75rem;
+      }
+
+      /* Toolbar Button Group 1 (Add/Reverse/Clear) */
+      .wb-toolbar>div:first-child {
+        width: 100%;
+        display: grid !important;
+        grid-template-columns: 1fr 1fr 1fr;
+        gap: 0.5rem;
+      }
+
+      .wb-toolbar>div:first-child .btn {
+        padding: 0.5rem;
+        font-size: 0.75rem;
+        flex-direction: column;
+        gap: 0.25rem;
+        text-align: center;
+      }
+
+      /* Toolbar Group 2 (Filename + Download) */
+      .wb-toolbar>div:last-child {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      #filenameInput {
+        width: 100% !important;
+      }
+
+      #mainActionBtn {
+        width: 100%;
+        justify-content: center;
+      }
+
+      /* Grid */
+      .wb-grid {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+        /* Smaller cards */
+        gap: 1rem;
+      }
+
+      /* Tools Grid */
+      .tools-grid {
+        grid-template-columns: 1fr;
+      }
+
+      /* Typography */
+      .hero-text h1 {
+        font-size: 1.75rem;
+      }
+    }
   </style>
 </head>
 
@@ -989,5 +1090,3 @@
 </body>
 
 </html>
-
-
