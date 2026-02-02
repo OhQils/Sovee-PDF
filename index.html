@@ -448,6 +448,44 @@
       font-weight: 500;
     }
 
+    /* Selection & Drag Styles */
+    .page-card.selected {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+    }
+
+    .page-card.drop-target-left {
+      position: relative;
+    }
+
+    .page-card.drop-target-left::before {
+      content: '';
+      position: absolute;
+      left: -1rem;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--primary);
+      border-radius: 2px;
+      z-index: 10;
+    }
+
+    .page-card.drop-target-right {
+      position: relative;
+    }
+
+    .page-card.drop-target-right::after {
+      content: '';
+      position: absolute;
+      right: -1rem;
+      top: 0;
+      bottom: 0;
+      width: 4px;
+      background: var(--primary);
+      border-radius: 2px;
+      z-index: 10;
+    }
+
     /* --------------------------------------------------------------------------------
            Modals & Utilities
            -------------------------------------------------------------------------------- */
@@ -744,7 +782,9 @@
       state: {
         mode: 'MERGE',
         sourceDocs: {},
-        pages: []
+        pages: [],
+        selectedIds: new Set(),
+        lastSelectedIdx: null // For Shift+Click range
       },
 
       tools: [
@@ -762,10 +802,32 @@
         this.ui.renderDashboard();
         this.bindEvents();
         lucide.createIcons();
+
+        // Global Auto-Scroll Listener
+        window.addEventListener('dragover', (e) => {
+          const scrollZone = 100; // px from edge
+          const step = 15; // px per frame
+          if (e.clientY < scrollZone) {
+            window.scrollBy(0, -step);
+          } else if (e.clientY > window.innerHeight - scrollZone) {
+            window.scrollBy(0, step);
+          }
+        });
       },
 
       bindEvents() {
         document.getElementById('fileInput').addEventListener('change', (e) => this.handleFiles(e.target.files));
+        // Clear selection when clicking outside
+        document.addEventListener('click', (e) => {
+          if (!e.target.closest('.page-card') && !e.target.closest('.action-btn-mini')) {
+            // If dragging, don't clear (handled elsewhere). If static click on bg, clear.
+            // Simple logic: if click on app/body
+            if (e.target.id === 'app' || e.target.classList.contains('wb-grid')) {
+              this.state.selectedIds.clear();
+              this.ui.renderGrid();
+            }
+          }
+        });
       },
 
       selectTool(mode) {
@@ -818,19 +880,27 @@
             }
 
             const sourceId = Math.random().toString(36).substring(7);
-            // Treat everything as a PDF source now
-            this.state.sourceDocs[sourceId] = { name: file.name.replace(/\.[^/.]+$/, "") + ".pdf", buffer };
 
+            // OPTIMIZATION: Parse PDF source ONCE and store the proxy
+            let pdfJsDoc = null;
             try {
-              const pdfDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
-              for (let i = 1; i <= pdfDoc.numPages; i++) {
-                this.state.pages.push({
-                  id: Math.random().toString(36).substring(2),
-                  sourceId, pageIndex: i, rotation: 0
-                });
-              }
+              pdfJsDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
             } catch (err) {
-              console.error(err);
+              console.error("Failed to parse PDF", err);
+              continue; // process next file
+            }
+
+            this.state.sourceDocs[sourceId] = {
+              name: file.name.replace(/\.[^/.]+$/, "") + ".pdf",
+              buffer: buffer,
+              pdfDoc: pdfJsDoc // Store the parsed doc
+            };
+
+            for (let i = 1; i <= pdfJsDoc.numPages; i++) {
+              this.state.pages.push({
+                id: Math.random().toString(36).substring(2),
+                sourceId, pageIndex: i, rotation: 0
+              });
             }
           }
           if (this.state.pages.length > 0) {
@@ -841,13 +911,20 @@
             this.ui.renderGrid();
             this.ui.toast(`Loaded ${files.length} files`);
           }
-        } catch (e) { this.ui.toast('Error loading files', 'error'); }
+        } catch (e) { this.ui.toast('Error loading files', 'error'); console.error(e); }
         finally { this.ui.showLoader(false); document.getElementById('fileInput').value = ''; }
       },
 
       goHome() {
         if (this.state.pages.length > 0 && !confirm('Clear current workspace?')) return;
+
+        // OPTIMIZATION: Cleanup memory
+        Object.values(this.state.sourceDocs).forEach(doc => {
+          if (doc.pdfDoc) doc.pdfDoc.destroy();
+        });
+
         this.state.pages = []; this.state.sourceDocs = {};
+        this.state.selectedIds.clear();
         document.getElementById('dashboard').style.display = 'block';
         document.getElementById('workbench').style.display = 'none';
         document.getElementById('statsBar').style.display = 'none';
@@ -871,7 +948,21 @@
         duplicate(idx) { const p = APP.state.pages[idx]; APP.state.pages.splice(idx + 1, 0, { ...p, id: Math.random().toString(36).substring(2) }); APP.ui.renderGrid(); APP.ui.updateStats(); },
         delete(idx) { APP.state.pages.splice(idx, 1); APP.ui.renderGrid(); APP.ui.updateStats(); },
         reverse() { APP.state.pages.reverse(); APP.ui.renderGrid(); },
-        deleteAll() { if (confirm("Clear all?")) { APP.state.pages = []; APP.ui.renderGrid(); APP.ui.updateStats(); } }
+        deleteAll() {
+          if (confirm("Clear all?")) {
+            // OPTIMIZATION: Cleanup memory
+            Object.values(APP.state.sourceDocs).forEach(doc => {
+              if (doc.pdfDoc) doc.pdfDoc.destroy();
+            });
+            APP.state.pages = [];
+            APP.state.sourceDocs = {};
+            APP.state.selectedIds.clear();
+            APP.ui.renderGrid();
+            APP.ui.updateStats();
+            // Force go home if empty
+            APP.goHome();
+          }
+        }
       },
 
       process: {
@@ -919,7 +1010,8 @@
             for (const p of APP.state.pages) {
               i++; APP.ui.showLoader(true, `Compressing ${i}/${APP.state.pages.length}`);
               const src = APP.state.sourceDocs[p.sourceId];
-              const pdfWrap = await pdfjsLib.getDocument({ data: src.buffer.slice(0) }).promise;
+              // Use cached doc if available, else load (but we should have it)
+              const pdfWrap = src.pdfDoc || await pdfjsLib.getDocument({ data: src.buffer }).promise;
               const pdfPage = await pdfWrap.getPage(p.pageIndex);
               const vp = pdfPage.getViewport({ scale: settings.scale });
               const cvs = document.createElement('canvas');
@@ -945,7 +1037,7 @@
             for (const p of APP.state.pages) {
               i++; APP.ui.showLoader(true, `Rendering ${i}/${APP.state.pages.length}`);
               const src = APP.state.sourceDocs[p.sourceId];
-              const pdfWrap = await pdfjsLib.getDocument({ data: src.buffer.slice(0) }).promise;
+              const pdfWrap = src.pdfDoc || await pdfjsLib.getDocument({ data: src.buffer }).promise;
               const pdfPage = await pdfWrap.getPage(p.pageIndex);
               const vp = pdfPage.getViewport({ scale: 2.0, rotation: p.rotation });
               const cvs = document.createElement('canvas'); cvs.width = vp.width; cvs.height = vp.height;
@@ -966,7 +1058,7 @@
             let txt = "";
             for (const p of APP.state.pages) {
               const src = APP.state.sourceDocs[p.sourceId];
-              const doc = await pdfjsLib.getDocument({ data: src.buffer.slice(0) }).promise;
+              const doc = src.pdfDoc || await pdfjsLib.getDocument({ data: src.buffer }).promise;
               const page = await doc.getPage(p.pageIndex);
               const tc = await page.getTextContent();
               txt += `--- Page ${p.pageIndex} ---\n` + tc.items.map(s => s.str).join(' ') + '\n\n';
@@ -1012,28 +1104,187 @@
           lucide.createIcons();
         },
         renderGrid() {
-          const grid = document.getElementById('grid'); grid.innerHTML = '';
-          APP.state.pages.forEach((p, idx) => grid.appendChild(this.createCard(p, idx)));
+          const grid = document.getElementById('grid');
+
+          // MAP Existing Elements
+          const existingMap = new Map();
+          Array.from(grid.children).forEach(el => {
+            existingMap.set(el.dataset.id, el);
+          });
+
+          // Document Fragment for batch append (minimized reflows)
+          const frag = document.createDocumentFragment();
+
+          APP.state.pages.forEach((p, idx) => {
+            let el = existingMap.get(p.id);
+
+            if (el) {
+              // REUSE Existing
+              existingMap.delete(p.id); // Remove from deletion candidates
+
+              // Update Index & Text
+              el.dataset.idx = idx;
+              el.querySelector('.card-info span').innerText = `Page ${p.pageIndex}`;
+
+              // Update Selection Visuals
+              if (APP.state.selectedIds.has(p.id)) el.classList.add('selected');
+              else el.classList.remove('selected');
+
+              // Reuse Drag Listeners (they reference 'idx' via dataset or closure?
+              // Wait, original listeners used closure 'idx'. This IS a problem for reuse.
+              // We need listeners to read from dataset or state dynamically.
+              // FIX: Update listeners to be dynamic OR re-attach?
+              // Re-attaching is messy. Better: Use event delegation or update closures?
+              // Updating closures is impossible.
+              // BEST FIX: The listeners I added in createCard need to be smart.
+              // Let's modify createCard AND renderGrid to ensure buttons refer to current index.
+              // Actually, easiest way is to re-assign onclick attributes for the buttons since they are simple strings in HTML.
+
+              const actionsDiv = el.querySelector('.card-actions');
+              actionsDiv.innerHTML = `
+                            <button class="action-btn-mini" onclick="event.stopPropagation(); APP.actions.rotate('${p.id}')"><i data-lucide="rotate-cw" size="14"></i></button>
+                            <button class="action-btn-mini" onclick="event.stopPropagation(); APP.actions.duplicate(${idx})"><i data-lucide="copy" size="14"></i></button>
+                            <button class="action-btn-mini danger" onclick="event.stopPropagation(); APP.actions.delete(${idx})"><i data-lucide="trash" size="14"></i></button>
+                 `;
+            } else {
+              // CREATE New
+              el = this.createCard(p, idx);
+            }
+            frag.appendChild(el);
+          });
+
+          // DELETE Removed Elements
+          existingMap.forEach(el => el.remove());
+
+          // APPEND Sorted Elements (Moves them if they exist)
+          grid.appendChild(frag);
+
           lucide.createIcons();
         },
         createCard(page, idx) {
-          const el = document.createElement('div'); el.className = 'page-card'; el.draggable = true; el.dataset.id = page.id;
+          const el = document.createElement('div');
+          el.className = `page-card ${APP.state.selectedIds.has(page.id) ? 'selected' : ''}`;
+          el.draggable = true;
+          el.dataset.id = page.id;
+          el.dataset.idx = idx; // Store current index
+
           el.innerHTML = `
                         <div class="card-preview"><canvas id="cvs_${page.id}"></canvas>
                         <div class="card-actions">
-                            <button class="action-btn-mini" onclick="APP.actions.rotate('${page.id}')"><i data-lucide="rotate-cw" size="14"></i></button>
-                            <button class="action-btn-mini" onclick="APP.actions.duplicate(${idx})"><i data-lucide="copy" size="14"></i></button>
-                            <button class="action-btn-mini danger" onclick="APP.actions.delete(${idx})"><i data-lucide="trash" size="14"></i></button>
+                            <button class="action-btn-mini" onclick="event.stopPropagation(); APP.actions.rotate('${page.id}')"><i data-lucide="rotate-cw" size="14"></i></button>
+                            <button class="action-btn-mini" onclick="event.stopPropagation(); APP.actions.duplicate(${idx})"><i data-lucide="copy" size="14"></i></button>
+                            <button class="action-btn-mini danger" onclick="event.stopPropagation(); APP.actions.delete(${idx})"><i data-lucide="trash" size="14"></i></button>
                         </div></div>
                         <div class="card-info"><span>Page ${page.pageIndex}</span></div>`;
+
           this.renderThumb(page);
-          el.addEventListener('dragstart', (e) => { e.dataTransfer.setData('idx', idx); el.classList.add('dragging'); });
-          el.addEventListener('dragend', () => el.classList.remove('dragging'));
-          el.addEventListener('dragover', (e) => e.preventDefault());
-          el.addEventListener('drop', (e) => {
-            e.preventDefault(); const from = parseInt(e.dataTransfer.getData('idx'));
-            if (from !== idx) { const [it] = APP.state.pages.splice(from, 1); APP.state.pages.splice(idx, 0, it); APP.ui.renderGrid(); }
+
+          // Selection Click Handler
+          el.addEventListener('click', (e) => {
+            // Refresh Index from dataset (it might have changed!)
+            const currentIdx = parseInt(el.dataset.idx);
+            const pId = el.dataset.id;
+
+            e.stopPropagation();
+
+            if (e.ctrlKey || e.metaKey) {
+              if (APP.state.selectedIds.has(pId)) APP.state.selectedIds.delete(pId);
+              else { APP.state.selectedIds.add(pId); APP.state.lastSelectedIdx = currentIdx; }
+            } else if (e.shiftKey && APP.state.lastSelectedIdx != null) {
+              const start = Math.min(APP.state.lastSelectedIdx, currentIdx);
+              const end = Math.max(APP.state.lastSelectedIdx, currentIdx);
+              for (let i = start; i <= end; i++) {
+                APP.state.selectedIds.add(APP.state.pages[i].id);
+              }
+            } else {
+              if (!APP.state.selectedIds.has(pId) || APP.state.selectedIds.size > 1) {
+                APP.state.selectedIds.clear();
+                APP.state.selectedIds.add(pId);
+                APP.state.lastSelectedIdx = currentIdx;
+              }
+            }
+            this.renderGrid();
           });
+
+          // Drag Events
+          el.addEventListener('dragstart', (e) => {
+            const currentIdx = parseInt(el.dataset.idx);
+            // If dragging an item NOT in selection, select it solely
+            if (!APP.state.selectedIds.has(page.id)) {
+              APP.state.selectedIds.clear();
+              APP.state.selectedIds.add(page.id);
+              this.renderGrid(); // Visually update before image snapshot
+            }
+
+            e.dataTransfer.setData('dummy', 'true');
+            el.classList.add('dragging');
+          });
+
+          el.addEventListener('dragend', () => {
+            el.classList.remove('dragging');
+            document.querySelectorAll('.page-card').forEach(c => c.classList.remove('drop-target-left', 'drop-target-right'));
+          });
+
+          el.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            const rect = el.getBoundingClientRect();
+            const mid = rect.left + rect.width / 2;
+            const isLeft = e.clientX < mid;
+
+            // Clean up others
+            document.querySelectorAll('.page-card').forEach(c => {
+              if (c !== el) c.classList.remove('drop-target-left', 'drop-target-right');
+            });
+
+            if (isLeft) {
+              el.classList.add('drop-target-left');
+              el.classList.remove('drop-target-right');
+            } else {
+              el.classList.add('drop-target-right');
+              el.classList.remove('drop-target-left');
+            }
+          });
+
+          el.addEventListener('drop', (e) => {
+            e.preventDefault();
+            el.classList.remove('drop-target-left', 'drop-target-right');
+
+            // Drop Target Info (Current updated info)
+            const targetIdx = parseInt(el.dataset.idx); // Live index from DOM
+            const rect = el.getBoundingClientRect();
+            const mid = rect.left + rect.width / 2;
+            const isLeft = e.clientX < mid;
+
+            let dropIndex = targetIdx;
+            if (!isLeft) dropIndex = targetIdx + 1;
+
+            // Perform Batch Move
+            const idsToMove = Array.from(APP.state.selectedIds);
+            const itemsToMove = [];
+
+            // Extract items first
+            APP.state.pages = APP.state.pages.filter(p => {
+              if (idsToMove.includes(p.id)) {
+                itemsToMove.push(p);
+                return false;
+              }
+              return true;
+            });
+
+            // Find new insertion point
+            let newTargetIdx = APP.state.pages.findIndex(p => p.id === el.dataset.id);
+            if (newTargetIdx === -1) {
+              newTargetIdx = APP.state.pages.length;
+            }
+
+            let finalIndex = newTargetIdx;
+            if (!isLeft) finalIndex += 1;
+
+            APP.state.pages.splice(finalIndex, 0, ...itemsToMove);
+
+            APP.ui.renderGrid();
+          });
+
           return el;
         },
         async renderThumb(page) {
@@ -1042,7 +1293,10 @@
             if (!canvas) return;
             canvas.style.transform = `rotate(${page.rotation}deg)`;
             const src = APP.state.sourceDocs[page.sourceId];
-            const doc = await pdfjsLib.getDocument({ data: src.buffer.slice(0) }).promise;
+
+            // OPTIMIZATION: Use cached document, NO BUFFER SLICE
+            const doc = src.pdfDoc || await pdfjsLib.getDocument({ data: src.buffer }).promise;
+
             const p = await doc.getPage(page.pageIndex);
             const vp = p.getViewport({ scale: 0.4 });
             canvas.width = vp.width; canvas.height = vp.height;
