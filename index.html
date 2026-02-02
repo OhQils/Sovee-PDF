@@ -884,7 +884,8 @@
             // OPTIMIZATION: Parse PDF source ONCE and store the proxy
             let pdfJsDoc = null;
             try {
-              pdfJsDoc = await pdfjsLib.getDocument({ data: buffer }).promise;
+              // Must pass a COPY (.slice(0)) because pdfjsLib transfers/detaches the buffer to worker
+              pdfJsDoc = await pdfjsLib.getDocument({ data: buffer.slice(0) }).promise;
             } catch (err) {
               console.error("Failed to parse PDF", err);
               continue; // process next file
